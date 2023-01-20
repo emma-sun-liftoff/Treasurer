@@ -13,23 +13,30 @@ and bid__margin_data__base_gross_margin is not NULL
 group by 1,2
 )
 
- 
-SELECT 
-tm.campaign_id,
-ec.logged_at,
-json_extract_scalar(ec.new_values, '$.margin_type') AS margin_type,
-coalesce (LAG(tm.vungle_gross_margin,1) OVER (PARTITION BY tm.campaign_id, json_extract_scalar(ec.new_values, '$.margin_type') ORDER BY ec.logged_at),bg.holdout_v_gross_margin) AS old_vungle_gross_margin,
-coalesce (LAG(tm.non_vungle_gross_margin,1) OVER (PARTITION BY tm.campaign_id, json_extract_scalar(ec.new_values, '$.margin_type') ORDER BY  ec.logged_at),bg.holdout_nv_gross_margin) AS old_non_vungle_gross_margin,
-tm.vungle_gross_margin as new_vungle_gross_margin,
-tm.non_vungle_gross_margin as new_non_vungle_gross_margin,
-bg.holdout_v_gross_margin,
-bg.holdout_nv_gross_margin,
-c.daily_revenue_limit
-FROM pinpoint.public.campaign_treasurer_configs ctc 
-FULL OUTER JOIN pinpoint.public.treasurer_margins tm ON tm.campaign_id = ctc.campaign_id
-FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  tm.id = ec.row_id
-LEFT JOIN pinpoint.public.campaigns c ON ctc.campaign_id = c.id
-LEFT JOIN base_gm bg ON tm.campaign_id = bg.campaign_id 
-  AND date(CAST(ec.logged_at AS timestamp(3))) = date(CAST(bg.dt AS timestamp(3))) 
-WHERE ec.table_name = 'treasurer_margins'
-  AND json_extract_scalar(ec.new_values, '$.margin_type') IN ('experiment','control')
+, updated_gm AS ( 
+      SELECT 
+      tm.campaign_id,
+      ec.logged_at,
+      json_extract_scalar(ec.new_values, '$.margin_type') AS margin_type,
+      coalesce (LAG(tm.vungle_gross_margin,1) OVER (PARTITION BY tm.campaign_id, json_extract_scalar(ec.new_values, '$.margin_type') ORDER BY ec.logged_at),bg.holdout_v_gross_margin) AS old_vungle_gross_margin,
+      coalesce (LAG(tm.non_vungle_gross_margin,1) OVER (PARTITION BY tm.campaign_id, json_extract_scalar(ec.new_values, '$.margin_type') ORDER BY  ec.logged_at),bg.holdout_nv_gross_margin) AS old_non_vungle_gross_margin,
+      tm.vungle_gross_margin as new_vungle_gross_margin,
+      tm.non_vungle_gross_margin as new_non_vungle_gross_margin,
+      bg.holdout_v_gross_margin,
+      bg.holdout_nv_gross_margin,
+      c.daily_revenue_limit
+      FROM pinpoint.public.campaign_treasurer_configs ctc 
+      FULL OUTER JOIN pinpoint.public.treasurer_margins tm ON tm.campaign_id = ctc.campaign_id
+      FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  tm.id = ec.row_id
+      LEFT JOIN pinpoint.public.campaigns c ON ctc.campaign_id = c.id
+      LEFT JOIN base_gm bg ON tm.campaign_id = bg.campaign_id 
+      AND date(CAST(ec.logged_at AS timestamp(3))) = date(CAST(bg.dt AS timestamp(3))) 
+      WHERE ec.table_name = 'treasurer_margins'
+      AND json_extract_scalar(ec.new_values, '$.margin_type') IN ('experiment','control')
+      AND date(CAST(ec.logged_at AS timestamp(3))) > date('2022-12-12'))
+
+SELECT*
+FROM updated_gm
+WHERE old_vungle_gross_margin <> new_vungle_gross_margin OR old_non_vungle_gross_margin <> new_non_vungle_gross_margin
+
+
