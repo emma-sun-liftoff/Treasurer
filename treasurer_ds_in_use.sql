@@ -267,16 +267,16 @@ GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12
   , info.logged_at
   , info.next_logged_at
   , info.margin_type
-  , max(CASE WHEN ps.dt >= info.logged_at AND ps.dt < info.next_logged_at  THEN info.new_vungle_gross_margin 
+  , max(CASE WHEN ps.dt >= info.logged_at AND ps.dt < info.next_logged_at AND ps.test_group_name <> 'holdout' THEN info.new_vungle_gross_margin 
            WHEN ps.test_group_name = 'holdout' THEN 999
            END) as new_vungle_gross_margin
-  , max(CASE WHEN ps.dt >= info.logged_at AND ps.dt < info.next_logged_at  THEN info.old_vungle_gross_margin 
+  , max(CASE WHEN ps.dt >= info.logged_at AND ps.dt < info.next_logged_at AND ps.test_group_name <> 'holdout'  THEN info.old_vungle_gross_margin 
            WHEN ps.test_group_name = 'holdout' THEN 999
            END) as old_vungle_gross_margin
-  , max(CASE WHEN ps.dt >= info.logged_at AND ps.dt < info.next_logged_at  THEN info.new_non_vungle_gross_margin 
+  , max(CASE WHEN ps.dt >= info.logged_at AND ps.dt < info.next_logged_at AND ps.test_group_name <> 'holdout'  THEN info.new_non_vungle_gross_margin 
            WHEN ps.test_group_name = 'holdout' THEN 999 
            END) as new_non_vungle_gross_margin
-  , max(CASE WHEN ps.dt >= info.logged_at AND ps.dt < info.next_logged_at  THEN info.old_non_vungle_gross_margin 
+  , max(CASE WHEN ps.dt >= info.logged_at AND ps.dt < info.next_logged_at AND ps.test_group_name <> 'holdout'  THEN info.old_non_vungle_gross_margin 
            WHEN ps.test_group_name = 'holdout' THEN 999 
            END) as old_non_vungle_gross_margin
   , max(info.target) as target
