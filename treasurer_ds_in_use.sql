@@ -1,16 +1,16 @@
 -- info: fetch all Treasurer-enabled campaigns' updates
 
 WITH info AS (
-    select 
+   SELECT 
     tm.campaign_id,
     case when 
       cast(ec.logged_at as date) < cast('2022-12-12' as date) then cast('2022-12-13' as timestamp(6)) 
       else cast(ec.logged_at as timestamp(3))
     end as logged_at,
-    cast(coalesce(LEAD(ec.logged_at) OVER(PARTITION BY tm.campaign_id, json_extract_scalar(ec.old_values, '$.margin_type') ORDER BY ec.logged_at), CURRENT_DATE) as timestamp(3)) as next_logged_at,
+    cast(coalesce(LEAD(ec.logged_at,2) OVER(PARTITION BY tm.campaign_id, json_extract_scalar(ec.old_values, '$.margin_type') ORDER BY ec.logged_at), CURRENT_DATE) as timestamp(3)) as next_logged_at,
     json_extract_scalar(ec.new_values, '$.margin_type') AS margin_type,
-    coalesce (LAG(tm.vungle_gross_margin,1) OVER (PARTITION BY tm.campaign_id, json_extract_scalar(ec.new_values, '$.margin_type') ORDER BY ec.logged_at),999999) AS old_vungle_gross_margin,
-    coalesce (LAG(tm.non_vungle_gross_margin,1) OVER (PARTITION BY tm.campaign_id, json_extract_scalar(ec.new_values, '$.margin_type') ORDER BY  ec.logged_at),999999) AS old_non_vungle_gross_margin,
+    coalesce (LAG(tm.vungle_gross_margin, 1) OVER (PARTITION BY tm.campaign_id, json_extract_scalar(ec.new_values, '$.margin_type') ORDER BY ec.logged_at),999999) AS old_vungle_gross_margin,
+    coalesce (LAG(tm.non_vungle_gross_margin, 1) OVER (PARTITION BY tm.campaign_id, json_extract_scalar(ec.new_values, '$.margin_type') ORDER BY ec.logged_at),999999) AS old_non_vungle_gross_margin,
     tm.vungle_gross_margin as new_vungle_gross_margin,
     tm.non_vungle_gross_margin as new_non_vungle_gross_margin,
     ctc.target, 
