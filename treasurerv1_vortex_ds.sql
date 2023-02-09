@@ -116,6 +116,7 @@ GROUP BY 1,2,3,4,5,6,7,8,9,10,11
 	, sum(CAST(COALESCE(CASE WHEN exchange = 'VUNGLE' THEN spend_micros ELSE 0 END,0) AS double)/power(10,6)) AS Acc_spend_on_V
 FROM analytics.trimmed_daily ad
 WHERE ad.dt BETWEEN '2022-12-12' and '2024-01-30'
+	AND is_uncredited<>'true'
 GROUP BY 1,2
 )
 
@@ -128,6 +129,7 @@ GROUP BY 1,2
   , SUM(CAST(ad.customer_revenue_micros_d7 AS DOUBLE)/1000000) as customer_revenue_d7
 FROM analytics.trimmed_daily_attr_event_d7_v1 ad
 WHERE ad.dt BETWEEN '2022-12-12' and '2024-01-30'
+	AND is_uncredited<>'true'
 GROUP BY 1,2
 )
 
