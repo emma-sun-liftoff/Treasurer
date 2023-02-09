@@ -1,3 +1,7 @@
+-- Total running time: <20 secs
+
+-- Treasurer margin updates (<5 seconds)
+
 WITH ctrl_gm AS (
  SELECT 
   tm.campaign_id
@@ -12,7 +16,7 @@ WITH ctrl_gm AS (
   LEFT JOIN pinpoint.public.campaigns c ON ctc.campaign_id = c.id
   WHERE ec.table_name = 'treasurer_margins'
   AND json_extract_scalar(ec.new_values, '$.margin_type') IN ('control')
-  AND date(CAST(ec.logged_at AS timestamp(3))) > date('2023-02-01') 
+  AND date(CAST(ec.logged_at AS timestamp(3))) > date('2022-12-12') 
   AND date(CAST(ec.logged_at AS timestamp(3))) < date('2024-01-30') 
  )
 
@@ -32,7 +36,7 @@ WITH ctrl_gm AS (
   LEFT JOIN pinpoint.public.campaigns c ON ctc.campaign_id = c.id
   WHERE ec.table_name = 'treasurer_margins'
   AND json_extract_scalar(ec.new_values, '$.margin_type') IN ('experiment')
-  AND date(CAST(ec.logged_at AS timestamp(3))) > date('2023-02-01') 
+  AND date(CAST(ec.logged_at AS timestamp(3))) > date('2022-12-12') 
   AND date(CAST(ec.logged_at AS timestamp(3))) < date('2024-01-30') 
  )
 
@@ -56,106 +60,139 @@ WITH ctrl_gm AS (
 )
 
 
+-- BI fields (<5 secs)
 , latest_sfdc_partition AS (
-    SELECT max(dt) as latest_dt 
-    FROM salesforce_daily.account 
+    SELECT MAX(dt) as latest_dt 
+    FROM salesforce_daily.customer_campaign__c  
     WHERE from_iso8601_timestamp(dt) >= CURRENT_TIMESTAMP - interval '2' DAY
 )
  
    
 , sfdc_data AS (
   SELECT 
-  	b.id AS campaign_id
+  	campaign_id_18_digit__c
     , sd.sales_region__c as sales_region
     , sd.sales_sub_region__c as sales_sub_region
     , sd.service_level__c AS service_level
 FROM salesforce_daily.customer_campaign__c sd 
-JOIN pinpoint.public.campaigns b 
-ON sd.campaign_id_18_digit__c = b.salesforce_campaign_id
-  WHERE sd.dt = (select latest_dt from latest_sfdc_partition)
+WHERE sd.dt = (select latest_dt from latest_sfdc_partition)
 )
 
 
-, info AS (
-SELECT 
-    DISTINCT ad.campaign_id
+, fields AS (
+	SELECT 
+   ad.campaign_id
 	, ad.campaign_name
 	, ad.customer_id 
 	, ad.customer_name   
 	, ad.dest_app_id 
 	, ad.dest_app_name 
 	, ad.campaign_type
-    , sfdc_data.sales_region
-    , sfdc_data.sales_sub_region
+  , sd.sales_region
+  , sd.sales_sub_region
 	, ad.platform
-	, sfdc_data.service_level
-	, ad.ae_email 
-	, ad.csm_email
+	, sd.service_level
+	, MAX(ad.ae_email) AS ae_email 
+	, MAX(ad.csm_email) AS csm_email 
 FROM analytics.trimmed_daily ad
-  LEFT JOIN sfdc_data
-    ON sfdc_data.campaign_id = ad.campaign_id
-WHERE dt >= '2023-02'
+JOIN pinpoint.public.campaigns b 
+		ON b.id = ad.campaign_id
+LEFT JOIN sfdc_data sd  			
+		ON sd.campaign_id_18_digit__c = b.salesforce_campaign_id
+WHERE ad.dt BETWEEN '2022-12-12' and '2024-01-30'
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11
 )
 
-, money_data0 AS (
-	SELECT bid__campaign_id AS campaign_id
-	, date_trunc('day', from_iso8601_timestamp(dt)) AS dt
-	, sum(CAST(revenue_micros AS double)/power(10,6)) AS Acc_GR
-	, sum(CAST(spend_micros AS double)/power(10,6)) AS Acc_spend
-	, sum(CAST(COALESCE(CASE WHEN exchange = 'VUNGLE' THEN revenue_micros ELSE 0 END,0) AS double)/power(10,6)) AS Acc_GR_on_V
+
+-- BI measures (<10 secs)
+, measures0_ AS (
+ SELECT 
+   date_trunc('day', from_iso8601_timestamp(ad.dt)) AS dt
+  , ad.campaign_id
+	, SUM(ad.installs) as installs
+  , SUM(CAST(revenue_micros AS double)/power(10,6)) AS Acc_GR
+	, SUM(CAST(spend_micros AS double)/power(10,6)) AS Acc_spend
+	, SUM(CAST(COALESCE(CASE WHEN exchange = 'VUNGLE' THEN revenue_micros ELSE 0 END,0) AS double)/power(10,6)) AS Acc_GR_on_V
 	, sum(CAST(COALESCE(CASE WHEN exchange = 'VUNGLE' THEN spend_micros ELSE 0 END,0) AS double)/power(10,6)) AS Acc_spend_on_V
-	FROM rtb.impressions_with_bids
-	WHERE dt BETWEEN '2022-12-12' and '2024-01-30'
-	AND bid__margin_data__base_gross_margin is not NULL
-	GROUP BY 1,2
+FROM analytics.trimmed_daily ad
+WHERE ad.dt BETWEEN '2022-12-12' and '2024-01-30'
+GROUP BY 1,2
 )
 
 
-, money_data AS (
+, measures1_ AS (
+ SELECT 
+   date_trunc('day', from_iso8601_timestamp(ad.dt)) AS dt
+  , ad.campaign_id
+  , SUM(ad.target_events_d7) as target_events_d7
+  , SUM(CAST(ad.customer_revenue_micros_d7 AS DOUBLE)/1000000) as customer_revenue_d7
+FROM analytics.trimmed_daily_attr_event_d7_v1 ad
+WHERE ad.dt BETWEEN '2022-12-12' and '2024-01-30'
+GROUP BY 1,2
+)
+
+
+, measures_ AS (
 	SELECT
-	campaign_id
-	, dt
+	m0.campaign_id
+	, m0.dt
 	, Acc_GR
 	, Acc_spend
 	, Acc_GR_on_V
 	, Acc_spend_on_V
-	, LAG(Acc_GR,1) OVER (PARTITION BY campaign_id ORDER BY dt) AS previous_day_Acc_GR
-	, LAG(Acc_spend,1) OVER (PARTITION BY campaign_id ORDER BY dt) AS previous_day_Acc_spend
-	, LAG(Acc_GR_on_V,1) OVER (PARTITION BY campaign_id ORDER BY dt) AS previous_day_Acc_GR_on_V
-	, LAG(Acc_spend_on_V,1) OVER (PARTITION BY campaign_id ORDER BY dt) AS previous_day_Acc_spend_on_V
-	FROM money_data0
+	, LAG(Acc_GR,1) OVER (PARTITION BY m0.campaign_id ORDER BY m0.dt) AS previous_day_Acc_GR
+	, LAG(Acc_spend,1) OVER (PARTITION BY m0.campaign_id ORDER BY m0.dt) AS previous_day_Acc_spend
+	, LAG(Acc_GR_on_V,1) OVER (PARTITION BY m0.campaign_id ORDER BY m0.dt) AS previous_day_Acc_GR_on_V
+	, LAG(Acc_spend_on_V,1) OVER (PARTITION BY m0.campaign_id ORDER BY m0.dt) AS previous_day_Acc_spend_on_V
+	, installs
+	, target_events_d7
+	, customer_revenue_d7
+	, LAG(installs,1) OVER (PARTITION BY m1.campaign_id ORDER BY m1.dt) AS previous_day_installs
+	, LAG(target_events_d7,1) OVER (PARTITION BY m1.campaign_id ORDER BY m1.dt) AS previous_day_target_events_d7
+	, LAG(customer_revenue_d7,1) OVER (PARTITION BY m1.campaign_id ORDER BY m1.dt) AS previous_day_customer_revenue_d7
+	FROM measures0_ m0
+	LEFT JOIN measures1_ m1
+		 ON m0.campaign_id = m1.campaign_id AND m0.dt = m1.dt
+
 )
 
 
-, fields AS (
+-- (< 10 secs)
+, f_merge_ AS (
 	SELECT
-	md.dt 
-	, i.campaign_id
-	, i.campaign_name
-	, i.customer_id
-	, i.customer_name
-	, i.dest_app_id
-	, i.dest_app_name
-	, i.campaign_type
-	, i.sales_region
-	, i.sales_sub_region
-	, i.platform
-	, i.service_level
-	, i.ae_email
-	, i.csm_email
-	, md.Acc_GR
-	, md.Acc_spend
-	, md.Acc_GR_on_V
-	, md.Acc_spend_on_V
-	, md.previous_day_Acc_GR
-	, md.previous_day_Acc_spend
-	, md.previous_day_Acc_GR_on_V
-	, md.previous_day_Acc_spend_on_V
-	FROM money_data md 
-	INNER JOIN info i
-		ON i.campaign_id = md.campaign_id
-
+	f.campaign_id
+	, m.dt
+	, f.campaign_name
+	, f.customer_id
+	, f.customer_name
+	, f.dest_app_id
+	, f.dest_app_name
+	, f.campaign_type
+	, f.sales_region
+	, f.sales_sub_region
+	, f.platform
+	, f.service_level
+	, f.ae_email
+	, f.csm_email
+	, m.Acc_GR
+	, m.Acc_spend
+	, m.Acc_GR_on_V
+	, m.Acc_spend_on_V
+	, m.previous_day_Acc_GR
+	, m.previous_day_Acc_spend
+	, m.previous_day_Acc_GR_on_V
+	, m.previous_day_Acc_spend_on_V
+	, m.installs
+	, m.target_events_d7
+	, m.customer_revenue_d7
+	, m.previous_day_installs
+	, m.previous_day_target_events_d7
+	, m.previous_day_customer_revenue_d7
+	FROM measures_ m
+	INNER JOIN fields f
+		ON f.campaign_id = m.campaign_id
 )
+
 
 SELECT 
 	ug.updated_date
@@ -189,11 +226,13 @@ SELECT
 	, f.previous_day_Acc_spend
 	, f.previous_day_Acc_GR_on_V
 	, f.previous_day_Acc_spend_on_V
---	, f.installs
---	, f.target_events_d7
---	, f.customer_revenue_d7
+	, f.installs
+	, f.target_events_d7
+	, f.customer_revenue_d7
+	, f.previous_day_installs
+	, f.previous_day_target_events_d7
+	, f.previous_day_customer_revenue_d7
 FROM updated_gm ug
-JOIN fields f 
+LEFT JOIN f_merge_ f 
 	ON ug.campaign_id = f.campaign_id
-	AND ug.updated_date = date(CAST(f.dt AS timestamp(3))) 
-	
+	AND ug.updated_date = date(CAST(f.dt AS timestamp(3)))
