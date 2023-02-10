@@ -13,7 +13,6 @@ WITH ctrl_gm AS (
  FROM pinpoint.public.campaign_treasurer_configs ctc 
   FULL OUTER JOIN pinpoint.public.treasurer_margins tm ON tm.campaign_id = ctc.campaign_id
   FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  tm.id = ec.row_id
-  LEFT JOIN pinpoint.public.campaigns c ON ctc.campaign_id = c.id
   WHERE ec.table_name = 'treasurer_margins'
   AND json_extract_scalar(ec.new_values, '$.margin_type') IN ('control')
   AND date(CAST(ec.logged_at AS timestamp(3))) > date('2022-12-12') 
@@ -29,11 +28,9 @@ WITH ctrl_gm AS (
   , LAG(tm.non_vungle_gross_margin,1) OVER (PARTITION BY tm.campaign_id, json_extract_scalar(ec.new_values, '$.margin_type') ORDER BY ec.logged_at) AS test_old_non_vungle_gross_margin
   , tm.vungle_gross_margin AS test_new_vungle_gross_margin
   , tm.non_vungle_gross_margin AS test_new_non_vungle_gross_margin
-  , c.daily_revenue_limit
  FROM pinpoint.public.campaign_treasurer_configs ctc 
   FULL OUTER JOIN pinpoint.public.treasurer_margins tm ON tm.campaign_id = ctc.campaign_id
   FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  tm.id = ec.row_id
-  LEFT JOIN pinpoint.public.campaigns c ON ctc.campaign_id = c.id
   WHERE ec.table_name = 'treasurer_margins'
   AND json_extract_scalar(ec.new_values, '$.margin_type') IN ('experiment')
   AND date(CAST(ec.logged_at AS timestamp(3))) > date('2022-12-12') 
@@ -53,7 +50,6 @@ WITH ctrl_gm AS (
 	, ctrl_new_non_vungle_gross_margin
 	, test_new_vungle_gross_margin
 	, test_new_non_vungle_gross_margin
-	, t.daily_revenue_limit
  FROM ctrl_gm c
  JOIN test_gm t
  	ON c.campaign_id = t.campaign_id AND c.updated_date = t.updated_date
@@ -94,12 +90,14 @@ WHERE sd.dt = (select latest_dt from latest_sfdc_partition)
 	, sd.service_level
 	, MAX(ad.ae_email) AS ae_email 
 	, MAX(ad.csm_email) AS csm_email 
+	, MAX(b.daily_revenue_limit) AS daily_revenue_limit
 FROM analytics.trimmed_daily ad
 JOIN pinpoint.public.campaigns b 
 		ON b.id = ad.campaign_id
 LEFT JOIN sfdc_data sd  			
 		ON sd.campaign_id_18_digit__c = b.salesforce_campaign_id
 WHERE ad.dt BETWEEN '2022-12-12' and '2024-01-30'
+	AND ad.campaign_id IN (SELECT DISTINCT campaign_id FROM updated_gm)
 GROUP BY 1,2,3,4,5,6,7,8,9,10,11
 )
 
@@ -117,6 +115,7 @@ GROUP BY 1,2,3,4,5,6,7,8,9,10,11
 FROM analytics.trimmed_daily ad
 WHERE ad.dt BETWEEN '2022-12-12' and '2024-01-30'
 	AND is_uncredited<>'true'
+	AND ad.campaign_id IN (SELECT DISTINCT campaign_id FROM updated_gm)
 GROUP BY 1,2
 )
 
@@ -130,6 +129,7 @@ GROUP BY 1,2
 FROM analytics.trimmed_daily_attr_event_d7_v1 ad
 WHERE ad.dt BETWEEN '2022-12-12' and '2024-01-30'
 	AND is_uncredited<>'true'
+	AND ad.campaign_id IN (SELECT DISTINCT campaign_id FROM updated_gm)
 GROUP BY 1,2
 )
 
@@ -176,6 +176,7 @@ GROUP BY 1,2
 	, f.service_level
 	, f.ae_email
 	, f.csm_email
+	, f.daily_revenue_limit
 	, m.Acc_GR
 	, m.Acc_spend
 	, m.Acc_GR_on_V
@@ -212,6 +213,7 @@ SELECT
 	, f.service_level
 	, f.ae_email 
 	, f.csm_email 
+	, f.daily_revenue_limit
 	, ug.ctrl_old_vungle_gross_margin
 	, ug.ctrl_old_non_vungle_gross_margin
 	, ug.test_old_vungle_gross_margin
@@ -220,7 +222,6 @@ SELECT
 	, ug.ctrl_new_non_vungle_gross_margin
 	, ug.test_new_vungle_gross_margin
 	, ug.test_new_non_vungle_gross_margin
-	, ug.daily_revenue_limit
 	, f.Acc_GR
 	, f.Acc_spend
 	, f.Acc_GR_on_V
