@@ -197,8 +197,9 @@ GROUP BY 1,2
 
 
 SELECT 
-	ug.updated_date
-	, ug.campaign_id
+	f.campaign_id
+	, date(f.dt) AS dt
+	, ug.updated_date
 	, f.campaign_name
 	, f.customer_id 
 	, f.customer_name   
@@ -234,7 +235,7 @@ SELECT
 	, f.previous_day_installs
 	, f.previous_day_target_events_d7
 	, f.previous_day_customer_revenue_d7
-FROM updated_gm ug
-LEFT JOIN f_merge_ f 
+FROM f_merge_ f
+LEFT JOIN updated_gm ug
 	ON ug.campaign_id = f.campaign_id
 	AND ug.updated_date = date(CAST(f.dt AS timestamp(3)))
