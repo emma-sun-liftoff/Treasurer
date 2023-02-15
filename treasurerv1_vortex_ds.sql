@@ -10,6 +10,7 @@ WITH ctrl_gm AS (
   , COALESCE(LAG(tm.non_vungle_gross_margin,1) OVER (PARTITION BY tm.campaign_id, json_extract_scalar(ec.new_values, '$.margin_type') ORDER BY  ec.logged_at),0) AS ctrl_old_non_vungle_gross_margin
   , tm.vungle_gross_margin AS ctrl_new_vungle_gross_margin
   , tm.non_vungle_gross_margin AS ctrl_new_non_vungle_gross_margin
+  , ctc.target
  FROM pinpoint.public.campaign_treasurer_configs ctc 
   FULL OUTER JOIN pinpoint.public.treasurer_margins tm ON tm.campaign_id = ctc.campaign_id
   FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  tm.id = ec.row_id
@@ -28,6 +29,7 @@ WITH ctrl_gm AS (
   , LAG(tm.non_vungle_gross_margin,1) OVER (PARTITION BY tm.campaign_id, json_extract_scalar(ec.new_values, '$.margin_type') ORDER BY ec.logged_at) AS test_old_non_vungle_gross_margin
   , tm.vungle_gross_margin AS test_new_vungle_gross_margin
   , tm.non_vungle_gross_margin AS test_new_non_vungle_gross_margin
+  , ctc.target
  FROM pinpoint.public.campaign_treasurer_configs ctc 
   FULL OUTER JOIN pinpoint.public.treasurer_margins tm ON tm.campaign_id = ctc.campaign_id
   FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  tm.id = ec.row_id
@@ -41,6 +43,7 @@ WITH ctrl_gm AS (
 , updated_gm AS (
 	SELECT 
 	t.campaign_id
+	, t.target
 	, t.updated_date
 	, COALESCE(ctrl_old_vungle_gross_margin, test_old_vungle_gross_margin) AS ctrl_old_vungle_gross_margin
 	, COALESCE(ctrl_old_non_vungle_gross_margin, test_old_non_vungle_gross_margin) AS ctrl_old_non_vungle_gross_margin
@@ -66,7 +69,7 @@ WITH ctrl_gm AS (
    
 , sfdc_data AS (
   SELECT 
-  	campaign_id_18_digit__c
+    campaign_id_18_digit__c
     , sd.sales_region__c as sales_region
     , sd.sales_sub_region__c as sales_sub_region
     , sd.service_level__c AS service_level
@@ -76,16 +79,16 @@ WHERE sd.dt = (select latest_dt from latest_sfdc_partition)
 
 
 , fields AS (
-	SELECT 
-   ad.campaign_id
+   SELECT 
+        ad.campaign_id
 	, ad.campaign_name
 	, ad.customer_id 
 	, ad.customer_name   
 	, ad.dest_app_id 
 	, ad.dest_app_name 
 	, ad.campaign_type
-  , sd.sales_region
-  , sd.sales_sub_region
+        , sd.sales_region
+        , sd.sales_sub_region
 	, ad.platform
 	, sd.service_level
 	, MAX(ad.ae_email) AS ae_email 
@@ -214,6 +217,7 @@ SELECT
 	, f.ae_email 
 	, f.csm_email 
 	, f.daily_revenue_limit
+	, ug.target
 	, ug.ctrl_old_vungle_gross_margin
 	, ug.ctrl_old_non_vungle_gross_margin
 	, ug.test_old_vungle_gross_margin
