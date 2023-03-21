@@ -1,6 +1,6 @@
 -- info: fetch all Treasurer-enabled campaigns' updates
 
-WITH info AS (
+WITH configs0 AS (
    SELECT 
     tm.campaign_id,
     case when 
@@ -14,7 +14,7 @@ WITH info AS (
     tm.vungle_gross_margin as new_vungle_gross_margin,
     tm.non_vungle_gross_margin as new_non_vungle_gross_margin,
     ctc.target, 
-    ctc.threshold,
+   -- ctc.threshold,
     c.daily_revenue_limit
     FROM pinpoint.public.campaign_treasurer_configs ctc 
     FULL OUTER JOIN pinpoint.public.treasurer_margins tm ON tm.campaign_id = ctc.campaign_id
@@ -22,6 +22,57 @@ WITH info AS (
     LEFT JOIN pinpoint.public.campaigns c ON ctc.campaign_id = c.id
     WHERE ec.table_name = 'treasurer_margins'
     AND json_extract_scalar(ec.new_values, '$.margin_type') IN ('experiment','control')
+)
+
+
+, thresholds AS (
+   SELECT tm.campaign_id
+   , CAST(ec.logged_at AS timestamp(3)) AS updated_date
+   , max(COALESCE(json_extract_scalar(ec.new_values, '$.threshold'), json_extract_scalar(ec.old_values, '$.threshold'),'0')) AS threshold 
+ FROM pinpoint.public.campaign_treasurer_configs ctc 
+  FULL OUTER JOIN pinpoint.public.treasurer_margins tm ON tm.campaign_id = ctc.campaign_id
+  FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  ctc.id = ec.row_id
+  WHERE ec.table_name = 'campaign_treasurer_configs'
+  AND date(CAST(ec.logged_at AS timestamp(3))) > date('2022-12-12') 
+  AND date(CAST(ec.logged_at AS timestamp(3))) < date('2024-01-30') 
+  AND margin_type IS NOT NULL 
+  --AND COALESCE(json_extract_scalar(ec.new_values, '$.threshold'), json_extract_scalar(ec.old_values, '$.threshold')) IS NOT NULL 
+  --AND tm.campaign_id = 28519
+  GROUP BY 1,2
+  ORDER BY 2
+)
+
+	
+, info AS (
+SELECT 
+	campaign_id
+	, logged_at
+	, next_logged_at
+	, margin_type
+	, old_vungle_gross_margin
+	, old_non_vungle_gross_margin
+	, new_vungle_gross_margin
+	, new_non_vungle_gross_margin
+	, target
+	, daily_revenue_limit
+	, NULL AS threshold
+	 FROM configs0
+   	
+    UNION 
+	
+	SELECT
+	campaign_id
+	, updated_date AS logged_at
+	, NULL AS next_logged_at
+	, NULL AS margin_type
+	, NULL AS old_vungle_gross_margin
+	, NULL AS old_non_vungle_gross_margin
+	, NULL AS new_vungle_gross_margin
+	, NULL AS new_non_vungle_gross_margin
+	, NULL AS target
+	, NULL AS daily_revenue_limit
+	, threshold
+	FROM thresholds 
 )
 
 
