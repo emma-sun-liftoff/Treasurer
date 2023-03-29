@@ -41,6 +41,7 @@ AND impression_at BETWEEN '2022-12-13T00' and '2024-01-01'
     FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  tm.id = ec.row_id
     WHERE ec.table_name = 'treasurer_margins'
     AND json_extract_scalar(ec.new_values, '$.margin_type') IN ('experiment','control')
+    AND CAST(ec.logged_at AS timestamp(3)) > CAST('2023-01-01' AS timestamp(3))
     GROUP BY 2
 
 
