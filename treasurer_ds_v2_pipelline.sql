@@ -52,9 +52,7 @@ WITH funnel as (
         END) AS aovx_nr_micros_2 
     FROM rtb.impressions_with_bids a
     CROSS JOIN UNNEST(bid__bid_request__ab_test_assignments) as ab_test
-    WHERE dt = '{{ dt }}'
-        AND concat(substr(to_iso8601(date_trunc('hour', from_unixtime(at/1000, 'UTC'))),1,19),'Z') = '{{ dt }}'
-        
+    WHERE dt >= '{{ dt }}' AND dt < '{{ dt_add(dt, hours=1) }}'
         AND ab_test.id = 916
     GROUP BY 1,2,3,4,5,6,7,8,9
 
@@ -88,9 +86,7 @@ WITH funnel as (
 
     FROM rtb.matched_installs a
     CROSS JOIN UNNEST(ad_click__impression__bid__bid_request__ab_test_assignments) ab_test
-    WHERE dt  = '{{ dt }}'
-        AND concat(substr(to_iso8601(date_trunc('hour', from_unixtime(ad_click__impression__at/1000, 'UTC'))),1,19),'Z')  = '{{ dt }}'
-        
+    WHERE dt >= '{{ dt }}' AND dt < '{{ dt_add(dt, hours=1) }}'
         AND ab_test.id = 916
         AND for_reporting = TRUE
         AND NOT is_uncredited
@@ -132,9 +128,7 @@ WITH funnel as (
         ON coalesce(attribution_event__click__impression__bid__campaign_id
                 , reeng_click__impression__bid__campaign_id
                 , install__ad_click__impression__bid__campaign_id) = pinpoint_event_ids.campaign_id
-    WHERE dt  = '{{ dt }}'
-        AND concat(substr(to_iso8601(date_trunc('hour', from_unixtime(coalesce(attribution_event__click__impression__at, reeng_click__impression__at, install__ad_click__impression__at)/1000, 'UTC'))),1,19),'Z')  = '{{ dt }}'
-        
+    WHERE dt >= '{{ dt }}' AND dt < '{{ dt_add(dt, hours=1) }}'
         AND ab_test.id = 916
         AND for_reporting = TRUE
         AND NOT is_uncredited
@@ -191,11 +185,8 @@ WITH funnel as (
       FROM rtb.app_events AS app 
       CROSS JOIN Unnest (
            install__ad_click__impression__bid__bid_request__ab_test_assignments) AS ab_test
-      WHERE  dt = '{{ dt }}'
-          AND CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(install__at/1000, 'UTC'))),1,19),'Z') = '{{ dt }}'      
-          
+      WHERE  dt >= '{{ dt }}' AND dt < '{{ dt_add(dt, hours=1) }}'
           AND ab_test.id = 916
-          AND coalesce(attribution_event__click__impression__bid__bid_request__exchange, reeng_click__impression__bid__bid_request__exchange, install__ad_click__impression__bid__bid_request__exchange) <> 'LIFTOFF'
           AND coalesce(attribution_event__click__impression__bid__creative__type, reeng_click__impression__bid__creative__type, install__ad_click__impression__bid__creative__type) <> 'UNMATCHED'
           AND is_uncredited = false
           AND customer_revenue_micros > 0
