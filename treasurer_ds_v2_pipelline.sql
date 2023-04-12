@@ -1,6 +1,3 @@
--- testing in the ds_v4
--- todo: update to dagger as v2, backfill to 2/10.
-
 WITH funnel as (
     -- to fetch impressions and AoVX NR
     SELECT
@@ -361,4 +358,3 @@ WITH funnel as (
   WHERE CAST(f.impression_at AS timestamp(3)) >= m.logged_at 
     AND CAST(f.impression_at AS timestamp(3)) < m.next_logged_at
   GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
-  
