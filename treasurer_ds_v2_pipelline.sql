@@ -54,9 +54,7 @@ WITH funnel as (
     GROUP BY 1,2,3,4,5,6,7,8,9
 
     UNION ALL 
-
     -- fetch matched installs
-
     SELECT
     CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(ad_click__impression__at/1000, 'UTC'))),1,19),'Z') as impression_at
     , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(event_timestamp/1000, 'UTC'))),1,19),'Z') as install_at
@@ -80,7 +78,6 @@ WITH funnel as (
     , sum(0) AS sum_squared_capped_customer_revenue_7d
     , sum(0) AS aovx_nr_micros_1 
     , sum(0) AS aovx_nr_micros_2
-
     FROM rtb.matched_installs a
     CROSS JOIN UNNEST(ad_click__impression__bid__bid_request__ab_test_assignments) ab_test
     WHERE dt >= '{{ dt }}' AND dt < '{{ dt_add(dt, hours=1) }}'
@@ -91,7 +88,6 @@ WITH funnel as (
     
     UNION ALL 
     -- fetch unmatched installs
-
     SELECT
     CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(ad_click__impression__at/1000, 'UTC'))),1,19),'Z') AS impression_at
     , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(event_timestamp/1000, 'UTC'))),1,19),'Z') AS install_at
@@ -101,7 +97,7 @@ WITH funnel as (
     , b.customer_id AS customer_id
     , 'UNMATCHED' AS exchange_group
     , tracker_params__platform AS platform
-    , cast(json_extract(from_utf8(ad_click__impression__bid__bid_request__raw), '$.imp[0].ext.pptype') AS integer) AS pptype
+    , CAST(json_extract(from_utf8(ad_click__impression__bid__bid_request__raw), '$.imp[0].ext.pptype') AS integer) AS pptype
     , sum(0) AS impressions
     , sum(1) AS installs
     , sum(0) AS treasurer_spend_micros
@@ -112,7 +108,6 @@ WITH funnel as (
     , sum(0) AS sum_squared_capped_customer_revenue_7d
     , sum(0) AS aovx_nr_micros_1 
     , sum(0) AS aovx_nr_micros_2
-
     FROM rtb.unmatched_installs a
     CROSS JOIN UNNEST(ad_click__impression__bid__bid_request__ab_test_assignments) ab_test
     LEFT JOIN pinpoint.public.campaigns b
@@ -125,7 +120,6 @@ WITH funnel as (
 
     UNION ALL 
     -- to fetch down funnel data (we are using 7d cohorted by installs data)
-
     SELECT
     CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(COALESCE(attribution_event__click__impression__at, reeng_click__impression__at, install__ad_click__impression__at)/1000, 'UTC'))),1,19),'Z') as impression_at
     , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(install__at/1000, 'UTC'))),1,19),'Z') as install_at
@@ -148,7 +142,6 @@ WITH funnel as (
     , sum(0) AS sum_squared_capped_customer_revenue_7d
     , sum(0) AS aovx_nr_micros_1 
     , sum(0) AS aovx_nr_micros_2
-
     FROM rtb.matched_app_events a
     CROSS JOIN UNNEST (
            install__ad_click__impression__bid__bid_request__ab_test_assignments) AS ab_test
@@ -167,7 +160,6 @@ WITH funnel as (
     
     UNION ALL 
     -- to fetch down funnel data (we are using 7d cohorted by installs data)
-
     SELECT
     CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(COALESCE(attribution_event__click__impression__at, reeng_click__impression__at, install__ad_click__impression__at)/1000, 'UTC'))),1,19),'Z') AS impression_at
     , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(install__at/1000, 'UTC'))),1,19),'Z') AS install_at
@@ -188,7 +180,6 @@ WITH funnel as (
     , sum(0) AS sum_squared_capped_customer_revenue_7d
     , sum(0) AS aovx_nr_micros_1 
     , sum(0) AS aovx_nr_micros_2
-
     FROM rtb.unmatched_app_events a
     CROSS JOIN UNNEST (
            install__ad_click__impression__bid__bid_request__ab_test_assignments) AS ab_test
