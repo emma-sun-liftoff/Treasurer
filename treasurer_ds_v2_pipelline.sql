@@ -93,17 +93,14 @@ WITH funnel as (
     -- fetch unmatched installs
 
     SELECT
-    CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(ad_click__impression__at/1000, 'UTC'))),1,19),'Z') as impression_at
-    , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(event_timestamp/1000, 'UTC'))),1,19),'Z') as install_at
+    CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(ad_click__impression__at/1000, 'UTC'))),1,19),'Z') AS impression_at
+    , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(event_timestamp/1000, 'UTC'))),1,19),'Z') AS install_at
     , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(event_timestamp/1000, 'UTC'))),1,19),'Z') AS at
     , ab_test."group".name as test_group_name
     , tracker_params__campaign_id AS campaign_id 
-    , ad_click__impression__bid__customer_id as customer_id
-    , CASE 
-        WHEN ad_click__impression__bid__bid_request__exchange = 'VUNGLE' THEN 'Vungle'
-      ELSE 'Non-Vungle'
-        END AS exchange_group
-    , ad_click__impression__bid__bid_request__device__platform AS platform
+    , b.customer_id AS customer_id
+    , 'UNMATCHED' AS exchange_group
+    , tracker_params__platform AS platform
     , cast(json_extract(from_utf8(ad_click__impression__bid__bid_request__raw), '$.imp[0].ext.pptype') AS integer) AS pptype
     , sum(0) AS impressions
     , sum(1) AS installs
@@ -118,6 +115,8 @@ WITH funnel as (
 
     FROM rtb.unmatched_installs a
     CROSS JOIN UNNEST(ad_click__impression__bid__bid_request__ab_test_assignments) ab_test
+    LEFT JOIN pinpoint.public.campaigns b
+        ON a.tracker_params__campaign_id = b.id
     WHERE dt >= '{{ dt }}' AND dt < '{{ dt_add(dt, hours=1) }}'
         AND ab_test.id = 916
         AND for_reporting = TRUE
@@ -170,16 +169,14 @@ WITH funnel as (
     -- to fetch down funnel data (we are using 7d cohorted by installs data)
 
     SELECT
-    CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(COALESCE(attribution_event__click__impression__at, reeng_click__impression__at, install__ad_click__impression__at)/1000, 'UTC'))),1,19),'Z') as impression_at
-    , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(install__at/1000, 'UTC'))),1,19),'Z') as install_at
-    , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(event_timestamp/1000, 'UTC'))),1,19),'Z') as at
+    CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(COALESCE(attribution_event__click__impression__at, reeng_click__impression__at, install__ad_click__impression__at)/1000, 'UTC'))),1,19),'Z') AS impression_at
+    , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(install__at/1000, 'UTC'))),1,19),'Z') AS install_at
+    , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(event_timestamp/1000, 'UTC'))),1,19),'Z') AS at
     , ab_test."group".name as test_group_name
     , tracker_params__campaign_id AS campaign_id
-    , COALESCE(attribution_event__click__impression__bid__customer_id, reeng_click__impression__bid__customer_id, install__ad_click__impression__bid__customer_id) as customer_id
-    , CASE WHEN COALESCE(attribution_event__click__impression__bid__bid_request__exchange, reeng_click__impression__bid__bid_request__exchange, install__ad_click__impression__bid__bid_request__exchange) = 'VUNGLE' THEN 'Vungle'
-        ELSE 'Non-Vungle'
-      END AS exchange_group
-    , COALESCE(attribution_event__click__impression__bid__app_platform, reeng_click__impression__bid__app_platform, install__ad_click__impression__bid__app_platform) as platform
+    , b.customer_id AS customer_id
+    , 'UNMATCHED' AS exchange_group
+    , tracker_params__platform AS platform
     , CAST(json_extract(from_utf8(coalesce(attribution_event__click__impression__bid__bid_request__raw, reeng_click__impression__bid__bid_request__raw, install__ad_click__impression__bid__bid_request__raw)), '$.imp[0].ext.pptype') AS integer) AS pptype
     , sum(0) AS impressions
     , sum(0) AS installs
@@ -195,13 +192,13 @@ WITH funnel as (
     FROM rtb.unmatched_app_events a
     CROSS JOIN UNNEST (
            install__ad_click__impression__bid__bid_request__ab_test_assignments) AS ab_test
+    LEFT JOIN pinpoint.public.campaigns b
+        ON a.tracker_params__campaign_id = b.id
     LEFT JOIN (SELECT
                 id as campaign_id
                 , cpa_target_event_id
                 FROM pinpoint.public.campaigns) pinpoint_event_ids
-        ON coalesce(attribution_event__click__impression__bid__campaign_id
-                , reeng_click__impression__bid__campaign_id
-                , install__ad_click__impression__bid__campaign_id) = pinpoint_event_ids.campaign_id
+        ON a.tracker_params__campaign_id = pinpoint_event_ids.campaign_id
     WHERE dt >= '{{ dt }}' AND dt < '{{ dt_add(dt, hours=1) }}'
         AND ab_test.id = 916
         AND for_reporting = TRUE
