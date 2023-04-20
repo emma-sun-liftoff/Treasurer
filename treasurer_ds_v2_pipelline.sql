@@ -55,7 +55,7 @@ WITH funnel as (
 
     UNION ALL 
 
-    -- fetch installs
+    -- fetch matched installs
 
     SELECT
     CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(ad_click__impression__at/1000, 'UTC'))),1,19),'Z') as impression_at
@@ -82,6 +82,41 @@ WITH funnel as (
     , sum(0) AS aovx_nr_micros_2
 
     FROM rtb.matched_installs a
+    CROSS JOIN UNNEST(ad_click__impression__bid__bid_request__ab_test_assignments) ab_test
+    WHERE dt >= '{{ dt }}' AND dt < '{{ dt_add(dt, hours=1) }}'
+        AND ab_test.id = 916
+        AND for_reporting = TRUE
+        AND NOT is_uncredited
+    GROUP BY 1,2,3,4,5,6,7,8,9
+    
+    UNION ALL 
+    -- fetch unmatched installs
+
+    SELECT
+    CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(ad_click__impression__at/1000, 'UTC'))),1,19),'Z') as impression_at
+    , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(event_timestamp/1000, 'UTC'))),1,19),'Z') as install_at
+    , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(event_timestamp/1000, 'UTC'))),1,19),'Z') AS at
+    , ab_test."group".name as test_group_name
+    , ad_click__impression__bid__campaign_id as campaign_id
+    , ad_click__impression__bid__customer_id as customer_id
+    , CASE 
+        WHEN ad_click__impression__bid__bid_request__exchange = 'VUNGLE' THEN 'Vungle'
+      ELSE 'Non-Vungle'
+        END AS exchange_group
+    , ad_click__impression__bid__bid_request__device__platform AS platform
+    , cast(json_extract(from_utf8(ad_click__impression__bid__bid_request__raw), '$.imp[0].ext.pptype') AS integer) AS pptype
+    , sum(0) AS impressions
+    , sum(1) AS installs
+    , sum(0) AS treasurer_spend_micros
+    , sum(0) AS treasurer_revenue_micros
+    , sum(0) AS customer_revenue_micros
+    , sum(0) AS events
+    , sum(0) AS sum_capped_customer_revenue_7d
+    , sum(0) AS sum_squared_capped_customer_revenue_7d
+    , sum(0) AS aovx_nr_micros_1 
+    , sum(0) AS aovx_nr_micros_2
+
+    FROM rtb.unmatched_installs a
     CROSS JOIN UNNEST(ad_click__impression__bid__bid_request__ab_test_assignments) ab_test
     WHERE dt >= '{{ dt }}' AND dt < '{{ dt_add(dt, hours=1) }}'
         AND ab_test.id = 916
