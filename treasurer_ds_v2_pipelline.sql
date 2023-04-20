@@ -314,12 +314,7 @@ WITH funnel as (
     , cu.company AS customer_name
     , sd.sales_region
     , sd.service_level
-    , CASE 
-        WHEN c.current_optimization_state IN ('cpr','cpr-vt','cprv3','cprv3-vt') THEN 'CPR'
-        WHEN c.current_optimization_state IN ('cpa','cpa-vt') THEN 'CPA'
-        WHEN c.current_optimization_state IN ('cpi','cpi-vt') THEN 'CPI'
-      ELSE 'others'
-      END  AS current_optimization_state
+    , c.current_optimization_state AS current_optimization_state
     , m.logged_at AS margin_updated_date
     , m.next_logged_at AS next_margin_updated_date
     , m.margin_type
