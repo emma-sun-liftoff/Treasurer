@@ -97,7 +97,7 @@ WITH funnel as (
     , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(event_timestamp/1000, 'UTC'))),1,19),'Z') as install_at
     , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(event_timestamp/1000, 'UTC'))),1,19),'Z') AS at
     , ab_test."group".name as test_group_name
-    , ad_click__impression__bid__campaign_id as campaign_id
+    , tracker_params__campaign_id AS campaign_id 
     , ad_click__impression__bid__customer_id as customer_id
     , CASE 
         WHEN ad_click__impression__bid__bid_request__exchange = 'VUNGLE' THEN 'Vungle'
@@ -151,6 +151,48 @@ WITH funnel as (
     , sum(0) AS aovx_nr_micros_2
 
     FROM rtb.matched_app_events a
+    CROSS JOIN UNNEST (
+           install__ad_click__impression__bid__bid_request__ab_test_assignments) AS ab_test
+    LEFT JOIN (SELECT
+                id as campaign_id
+                , cpa_target_event_id
+                FROM pinpoint.public.campaigns) pinpoint_event_ids
+        ON coalesce(attribution_event__click__impression__bid__campaign_id
+                , reeng_click__impression__bid__campaign_id
+                , install__ad_click__impression__bid__campaign_id) = pinpoint_event_ids.campaign_id
+    WHERE dt >= '{{ dt }}' AND dt < '{{ dt_add(dt, hours=1) }}'
+        AND ab_test.id = 916
+        AND for_reporting = TRUE
+        AND NOT is_uncredited
+    GROUP BY 1,2,3,4,5,6,7,8,9
+    
+    UNION ALL 
+    -- to fetch down funnel data (we are using 7d cohorted by installs data)
+
+    SELECT
+    CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(COALESCE(attribution_event__click__impression__at, reeng_click__impression__at, install__ad_click__impression__at)/1000, 'UTC'))),1,19),'Z') as impression_at
+    , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(install__at/1000, 'UTC'))),1,19),'Z') as install_at
+    , CONCAT(SUBSTR(to_iso8601(date_trunc('hour', from_unixtime(event_timestamp/1000, 'UTC'))),1,19),'Z') as at
+    , ab_test."group".name as test_group_name
+    , tracker_params__campaign_id AS campaign_id
+    , COALESCE(attribution_event__click__impression__bid__customer_id, reeng_click__impression__bid__customer_id, install__ad_click__impression__bid__customer_id) as customer_id
+    , CASE WHEN COALESCE(attribution_event__click__impression__bid__bid_request__exchange, reeng_click__impression__bid__bid_request__exchange, install__ad_click__impression__bid__bid_request__exchange) = 'VUNGLE' THEN 'Vungle'
+        ELSE 'Non-Vungle'
+      END AS exchange_group
+    , COALESCE(attribution_event__click__impression__bid__app_platform, reeng_click__impression__bid__app_platform, install__ad_click__impression__bid__app_platform) as platform
+    , CAST(json_extract(from_utf8(coalesce(attribution_event__click__impression__bid__bid_request__raw, reeng_click__impression__bid__bid_request__raw, install__ad_click__impression__bid__bid_request__raw)), '$.imp[0].ext.pptype') AS integer) AS pptype
+    , sum(0) AS impressions
+    , sum(0) AS installs
+    , sum(0) AS treasurer_spend_micros
+    , sum(0) AS treasurer_revenue_micros
+    , sum(if(customer_revenue_micros > -100000000000 AND customer_revenue_micros < 100000000000, customer_revenue_micros, 0)) AS  customer_revenue_micros
+    , sum(if(pinpoint_event_ids.cpa_target_event_id = custom_event_id,1,0)) AS  events
+    , sum(0) AS sum_capped_customer_revenue_7d
+    , sum(0) AS sum_squared_capped_customer_revenue_7d
+    , sum(0) AS aovx_nr_micros_1 
+    , sum(0) AS aovx_nr_micros_2
+
+    FROM rtb.unmatched_app_events a
     CROSS JOIN UNNEST (
            install__ad_click__impression__bid__bid_request__ab_test_assignments) AS ab_test
     LEFT JOIN (SELECT
@@ -229,7 +271,6 @@ WITH funnel as (
     GROUP BY 1,2,3,4,5,6,7,8,9
 
 )
-
 , thresholds AS (
   SELECT 
   ctc.campaign_id
@@ -240,11 +281,7 @@ WITH funnel as (
   FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  ctc.id = ec.row_id
   WHERE ec.table_name = 'campaign_treasurer_configs'
   AND json_extract(ec.new_values, '$.threshold') IS NOT NULL 
-
-  ORDER BY 1,2
 )
-
-
 , targets AS (
   SELECT 
   ctc.campaign_id
@@ -255,11 +292,7 @@ WITH funnel as (
   FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  ctc.id = ec.row_id
   WHERE ec.table_name = 'campaign_treasurer_configs'
   AND json_extract(ec.new_values, '$.target') IS NOT NULL 
-
-  ORDER BY 1,2
 )
-
-
 , margins AS (
    SELECT 
     tm.campaign_id
@@ -274,10 +307,7 @@ WITH funnel as (
     FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  tm.id = ec.row_id
     WHERE ec.table_name = 'treasurer_margins'
     AND json_extract_scalar(ec.new_values, '$.margin_type') IN ('experiment','control')
-
-    ORDER BY 1,2,3,4
    )
-   
  , daily_cap AS (
     SELECT 
       c.id AS campaign_id
@@ -290,15 +320,12 @@ WITH funnel as (
     AND ec.operation = 'update'
     AND json_extract(ec.new_values, '$.daily_revenue_limit') IS NOT NULL 
     AND date(ec.logged_at) BETWEEN date('2022-10-20') AND date('2024-04-30')
-
   )
- 
  , latest_sfdc_partition AS (
     SELECT MAX(dt) as latest_dt 
     FROM salesforce_daily.customer_campaign__c  
     WHERE from_iso8601_timestamp(dt) >= CURRENT_TIMESTAMP - interval '2' DAY
 )
- 
  , saleforce_data AS (
     SELECT 
       b.id AS campaign_id
@@ -308,9 +335,7 @@ WITH funnel as (
     JOIN pinpoint.public.campaigns b      
         ON sd.campaign_id_18_digit__c = b.salesforce_campaign_id
     WHERE sd.dt = (select latest_dt from latest_sfdc_partition)
-
 )
-
 , measures AS (
   SELECT
     f.impression_at
@@ -335,7 +360,6 @@ WITH funnel as (
   FROM funnel f
   GROUP BY 1,2,3,4,5,6,7,8,9
 )
-
   SELECT
     f.impression_at
     , f.install_at
