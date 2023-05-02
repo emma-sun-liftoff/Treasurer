@@ -259,6 +259,7 @@ WITH funnel as (
     GROUP BY 1,2,3,4,5,6,7,8,9
 
 )
+-- to fetch all thresholds and update time
 , thresholds AS (
   SELECT 
   ctc.campaign_id
@@ -270,6 +271,7 @@ WITH funnel as (
   WHERE ec.table_name = 'campaign_treasurer_configs'
   AND json_extract(ec.new_values, '$.threshold') IS NOT NULL 
 )
+-- to fetch all targets and update time 
 , targets AS (
   SELECT 
   ctc.campaign_id
@@ -281,6 +283,7 @@ WITH funnel as (
   WHERE ec.table_name = 'campaign_treasurer_configs'
   AND json_extract(ec.new_values, '$.target') IS NOT NULL 
 )
+-- to fetch all margins and update time
 , margins AS (
    SELECT 
     tm.campaign_id
@@ -296,6 +299,7 @@ WITH funnel as (
     WHERE ec.table_name = 'treasurer_margins'
     AND json_extract_scalar(ec.new_values, '$.margin_type') IN ('experiment','control')
    )
+ -- to fetch all daily cap changes and update time  
  , daily_cap AS (
     SELECT 
       c.id AS campaign_id
@@ -324,6 +328,7 @@ WITH funnel as (
         ON sd.campaign_id_18_digit__c = b.salesforce_campaign_id
     WHERE sd.dt = (select latest_dt from latest_sfdc_partition)
 )
+-- to aggregate measure data and calculate cohorted metrics
 , measures AS (
   SELECT
     f.impression_at
