@@ -263,8 +263,8 @@ WITH funnel as (
 , thresholds AS (
   SELECT 
   ctc.campaign_id
-   , date_trunc('hour', CAST(ec.logged_at AS timestamp(3))) AS logged_at
-   , date_trunc('hour', CAST(COALESCE(LEAD(ec.logged_at, 1) OVER (PARTITION BY ctc.campaign_id ORDER BY ec.logged_at), CURRENT_TIMESTAMP) AS timestamp(3))) AS next_logged_at
+   , date_trunc('hour', ec.logged_at) AS logged_at
+   , date_trunc('hour', COALESCE(LEAD(ec.logged_at, 1) OVER (PARTITION BY ctc.campaign_id ORDER BY ec.logged_at), CURRENT_TIMESTAMP)) AS next_logged_at
    , json_extract_scalar(ec.new_values, '$.threshold') AS threshold
  FROM pinpoint.public.campaign_treasurer_configs ctc
   FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  ctc.id = ec.row_id
@@ -275,8 +275,8 @@ WITH funnel as (
 , targets AS (
   SELECT 
   ctc.campaign_id
-   , date_trunc('hour', CAST(ec.logged_at AS timestamp(3))) AS logged_at
-   , date_trunc('hour', CAST(COALESCE(LEAD(ec.logged_at, 1) OVER (PARTITION BY ctc.campaign_id ORDER BY ec.logged_at), CURRENT_TIMESTAMP) AS timestamp(3))) AS next_logged_at
+   , date_trunc('hour', ec.logged_at) AS logged_at
+   , date_trunc('hour', COALESCE(LEAD(ec.logged_at, 1) OVER (PARTITION BY ctc.campaign_id ORDER BY ec.logged_at), CURRENT_TIMESTAMP)) AS next_logged_at
    , json_extract_scalar(ec.new_values, '$.target') AS target
   FROM pinpoint.public.campaign_treasurer_configs ctc
   FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  ctc.id = ec.row_id
@@ -287,8 +287,8 @@ WITH funnel as (
 , margins AS (
    SELECT 
     tm.campaign_id
-    , date_trunc('hour', CAST(ec.logged_at AS timestamp(3))) AS logged_at
-    , date_trunc('hour', CAST(COALESCE(LEAD(ec.logged_at, 2) OVER (PARTITION BY tm.campaign_id, json_extract_scalar(ec.old_values, '$.margin_type') ORDER BY ec.logged_at), CURRENT_TIMESTAMP) AS timestamp(3))) AS next_logged_at
+    , date_trunc('hour', ec.logged_at) AS logged_at
+    , date_trunc('hour', COALESCE(LEAD(ec.logged_at, 2) OVER (PARTITION BY tm.campaign_id, json_extract_scalar(ec.old_values, '$.margin_type') ORDER BY ec.logged_at), CURRENT_TIMESTAMP)) AS next_logged_at
     , json_extract_scalar(ec.new_values, '$.margin_type') AS margin_type
     , COALESCE (LAG(tm.vungle_gross_margin, 1) OVER (PARTITION BY tm.campaign_id, json_extract_scalar(ec.new_values, '$.margin_type') ORDER BY ec.logged_at), 999999) AS old_vungle_gross_margin
     , COALESCE (LAG(tm.non_vungle_gross_margin, 1) OVER (PARTITION BY tm.campaign_id, json_extract_scalar(ec.new_values, '$.margin_type') ORDER BY ec.logged_at), 999999) AS old_non_vungle_gross_margin
@@ -303,7 +303,7 @@ WITH funnel as (
  , daily_cap AS (
     SELECT 
       c.id AS campaign_id
-      , date_trunc('hour', CAST(ec.logged_at AS timestamp(3))) AS logged_at
+     , date_trunc('hour', ec.logged_at) AS logged_at
     , date_trunc('hour', CAST(COALESCE(LEAD(ec.logged_at, 1) OVER (PARTITION BY c.id ORDER BY ec.logged_at), CURRENT_TIMESTAMP) AS timestamp(3))) AS next_logged_at
     , json_extract_scalar(ec.new_values, '$.daily_revenue_limit') AS daily_cap
     FROM pinpoint.public.campaigns c
@@ -380,13 +380,13 @@ WITH funnel as (
     , max(f.sum_squared_capped_customer_revenue_7d) AS sum_squared_capped_customer_revenue_7d
     , max(f.aovx_nr_micros_1) AS aovx_nr_micros_1
     , max(f.aovx_nr_micros_2) AS aovx_nr_micros_2 
-    , max(CASE WHEN CAST(f.impression_at AS timestamp(3)) >= m.logged_at AND CAST(f.impression_at AS timestamp(3)) < m.next_logged_at THEN m.new_vungle_gross_margin END) AS new_vungle_gross_margin
-    , max(CASE WHEN CAST(f.impression_at AS timestamp(3)) >= m.logged_at AND CAST(f.impression_at AS timestamp(3)) < m.next_logged_at THEN m.old_vungle_gross_margin END) AS old_vungle_gross_margin
-    , max(CASE WHEN CAST(f.impression_at AS timestamp(3)) >= m.logged_at AND CAST(f.impression_at AS timestamp(3)) < m.next_logged_at THEN m.new_non_vungle_gross_margin END) AS new_non_vungle_gross_margin
-    , max(CASE WHEN CAST(f.impression_at AS timestamp(3)) >= m.logged_at AND CAST(f.impression_at AS timestamp(3)) < m.next_logged_at THEN m.old_non_vungle_gross_margin END) AS old_non_vungle_gross_margin
-    , max(CASE WHEN CAST(f.impression_at AS timestamp(3)) >= t.logged_at AND CAST(f.impression_at AS timestamp(3)) < t.next_logged_at THEN t.target END) AS current_target
-    , max(CASE WHEN CAST(f.impression_at AS timestamp(3)) >= th.logged_at AND CAST(f.impression_at AS timestamp(3)) < th.next_logged_at THEN th.threshold END) AS threshold
-    , max(CASE WHEN CAST(f.impression_at AS timestamp(3)) >= dc.logged_at AND CAST(f.impression_at AS timestamp(3)) < dc.next_logged_at THEN dc.daily_cap END) AS daily_cap
+    , max(CASE WHEN from_iso8601_timestamp(f.impression_at) >= m.logged_at AND from_iso8601_timestamp(f.impression_at) < m.next_logged_at THEN m.new_vungle_gross_margin END) AS new_vungle_gross_margin
+    , max(CASE WHEN from_iso8601_timestamp(f.impression_at) >= m.logged_at AND from_iso8601_timestamp(f.impression_at) < m.next_logged_at THEN m.old_vungle_gross_margin END) AS old_vungle_gross_margin
+    , max(CASE WHEN from_iso8601_timestamp(f.impression_at) >= m.logged_at AND from_iso8601_timestamp(f.impression_at) < m.next_logged_at THEN m.new_non_vungle_gross_margin END) AS new_non_vungle_gross_margin
+    , max(CASE WHEN from_iso8601_timestamp(f.impression_at) >= m.logged_at AND from_iso8601_timestamp(f.impression_at) < m.next_logged_at THEN m.old_non_vungle_gross_margin END) AS old_non_vungle_gross_margin
+    , max(CASE WHEN from_iso8601_timestamp(f.impression_at) >= t.logged_at AND from_iso8601_timestamp(f.impression_at) < t.next_logged_at THEN t.target END) AS current_target
+    , max(CASE WHEN from_iso8601_timestamp(f.impression_at) >= th.logged_at AND from_iso8601_timestamp(f.impression_at) < th.next_logged_at THEN th.threshold END) AS threshold
+    , max(CASE WHEN from_iso8601_timestamp(f.impression_at) >= dc.logged_at AND from_iso8601_timestamp(f.impression_at) < dc.next_logged_at THEN dc.daily_cap END) AS daily_cap
   FROM measures f
   LEFT JOIN margins m
    ON f.campaign_id = m.campaign_id  AND f.test_group_name = m.margin_type
@@ -402,6 +402,6 @@ WITH funnel as (
      ON f.customer_id = cu.id
   LEFT JOIN pinpoint.public.campaigns c
      ON f.campaign_id = c.id
-  WHERE CAST(f.impression_at AS timestamp(3)) >= m.logged_at 
-    AND CAST(f.impression_at AS timestamp(3)) < m.next_logged_at
+  WHERE from_iso8601_timestamp(f.impression_at) >= m.logged_at 
+    AND from_iso8601_timestamp(f.impression_at) < m.next_logged_at
   GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
