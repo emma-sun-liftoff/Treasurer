@@ -304,7 +304,7 @@ WITH funnel as (
     SELECT 
       c.id AS campaign_id
      , date_trunc('hour', ec.logged_at) AS logged_at
-    , date_trunc('hour', CAST(COALESCE(LEAD(ec.logged_at, 1) OVER (PARTITION BY c.id ORDER BY ec.logged_at), CURRENT_TIMESTAMP) AS timestamp(3))) AS next_logged_at
+    , date_trunc('hour', COALESCE(LEAD(ec.logged_at, 1) OVER (PARTITION BY ctc.campaign_id ORDER BY ec.logged_at), CURRENT_TIMESTAMP)) AS next_logged_at
     , json_extract_scalar(ec.new_values, '$.daily_revenue_limit') AS daily_cap
     FROM pinpoint.public.campaigns c
     FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  c.id = ec.row_id
