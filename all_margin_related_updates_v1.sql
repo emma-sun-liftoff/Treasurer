@@ -1,9 +1,14 @@
- 
+ --- below it is the base query
+ --  we can find all NR/RPI campaigns’ update dates when we 1) switch targets 2) apply manual adjustment 3)apply any system-wide margin update 4)when we change margin exploration algorithm. and we can find all disabled campaigns
+ --  how to use each columns as filter:
+ --  num_target is a good way to help you find campaigns where targets have been changed. Please reach out to me if you find num_target = 0.
+ --  updated_source is a filter to find manual update (=skipper), treasurer update (=treasurer), and eng-driven adhoc update (=adhoc).
+ -- 
 
 WITH all_ AS (    
 SELECT 
 ctc.campaign_id
-, CASE WHEN ctc.target = 'disabled' THEN ctc.target ELSE tda.target END AS tda_target
+, tda.target AS tda_target
 , ctc.target_reasons
 , 'treasurer' AS update_source
 , tda.margin_reason 
@@ -30,7 +35,7 @@ SELECT
 campaign_id
 , NULL AS tda_target
 , NULL AS target_reasons
-, "source"
+, "source" AS update_source
 , NULL AS margin_reason
 , NULL AS margin_exploration_algorithm
 , min(logged_at) AS min_updated_at
@@ -51,8 +56,34 @@ FROM (SELECT
 ) AS TT
 WHERE logged_at > from_iso8601_timestamp('2023-04-05')
 GROUP BY 1,2,3,4,5,6
-)
 
+UNION ALL 
+
+
+  SELECT 
+  ctc.campaign_id
+    , CAST(json_extract_scalar(ec.new_values, '$.target') AS varchar) AS tda_target
+   ,  ctc.target_reasons AS target_reasons
+    , NULL AS update_source
+    , NULL AS margin_reason
+    , NULL AS margin_exploration_algorithm 
+   , ec.logged_at AS min_updated_at
+  FROM pinpoint.public.campaign_treasurer_configs ctc
+  FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  ctc.id = ec.row_id
+  WHERE ec.table_name = 'campaign_treasurer_configs'
+  AND CAST(json_extract(ec.new_values, '$.target') AS varchar)= 'disabled' 
+  AND ec.logged_at > from_iso8601_timestamp('2023-04-05')
+  AND ctc.campaign_id NOT IN (SELECT
+	DISTINCT row_id AS campaign_id
+	FROM pinpoint.public.elephant_changes
+	WHERE table_name = 'campaigns'
+	AND operation = 'update'
+	AND json_extract_scalar(new_values, '$.state') = 'paused'
+	AND json_extract_scalar(new_values, '$.state_last_changed_at') > '2023-01-01'
+	)
+	
+)
+, all1_ AS (
 SELECT all_.campaign_id
 , min_update_at
 , num_target
@@ -71,4 +102,12 @@ WHERE all_.campaign_id NOT IN (SELECT
 	AND json_extract_scalar(new_values, '$.state') = 'paused'
 	AND json_extract_scalar(new_values, '$.state_last_changed_at') > '2023-01-01'
 	)
+)
+SELECT*
+FROM all1_
 ORDER BY 1,2
+
+-- query examples 
+-- all disabled campaigns
+WITH (base query)
+SELECT 
