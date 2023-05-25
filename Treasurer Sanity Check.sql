@@ -219,3 +219,11 @@ from ( select
  where  (old_vungle_gross_margin <> new_vungle_gross_margin
  OR old_non_vungle_gross_margin <> new_non_vungle_gross_margin)
  order by 2
+ 
+ --- target reasons w/ examples
+ SELECT DISTINCT target_reasons 
+, target 
+, max(campaign_id)
+FROM pinpoint.public.campaign_treasurer_configs 
+GROUP BY 1,2
+ORDER BY 2
