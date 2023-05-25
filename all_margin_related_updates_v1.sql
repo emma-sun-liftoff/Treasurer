@@ -2,6 +2,7 @@
  --  we can find all NR/RPI campaigns’ update dates when we 1) switch targets 2) apply manual adjustment 3)apply any system-wide margin update 4)when we change margin exploration algorithm. and we can find all disabled campaigns
  --  all campaigns are enabled campaigns after 2023/01/01. Any campaigns that are paused after 01/01 will be excluded.
  --  all nrm are final version
+ --  we have customer_id as well
  --  how to use each columns as filter:
  --  num_target is a good way to help you find campaigns where/when targets have been changed. This count all target changes since 2022/12/08. Please reach out to me if you find num_target = 0.
  --  updated_source is a filter to find manual update (=skipper), treasurer update (=treasurer), eng-driven adhoc update (=adhoc), and target update (=target_switch).
@@ -107,6 +108,7 @@ UNION ALL
 )
 , all1_ AS (
 SELECT all_.campaign_id
+, c.customer_id 
 , min_update_at
 , num_target
 , tda_target
@@ -120,6 +122,8 @@ SELECT all_.campaign_id
 , new_exp_non_vungle_nrm
 FROM all_
 LEFT JOIN (SELECT campaign_id, count(DISTINCT tda_target) AS num_target FROM all_ GROUP BY 1) AS num_target ON all_.campaign_id = num_target.campaign_id
+JOIN pinpoint.public.campaigns c
+	ON c.id = all_.campaign_id
 WHERE all_.campaign_id NOT IN (SELECT
 	DISTINCT row_id AS campaign_id
 	FROM pinpoint.public.elephant_changes
