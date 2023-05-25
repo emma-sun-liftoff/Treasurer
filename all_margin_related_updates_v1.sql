@@ -2,14 +2,14 @@
  --  we can find all NR/RPI campaigns’ update dates when we 1) switch targets 2) apply manual adjustment 3)apply any system-wide margin update 4)when we change margin exploration algorithm. and we can find all disabled campaigns
  --  all campaigns are enabled campaigns after 2023/01/01. Any campaigns that are paused after 01/01 will be excluded.
  --  how to use each columns as filter:
- --  num_target is a good way to help you find campaigns where targets have been changed. Please reach out to me if you find num_target = 0.
- --  updated_source is a filter to find manual update (=skipper), treasurer update (=treasurer), and eng-driven adhoc update (=adhoc).
+ --  num_target is a good way to help you find campaigns where/when targets have been changed. This count all target changes since 2022/12/08. Please reach out to me if you find num_target = 0.
+ --  updated_source is a filter to find manual update (=skipper), treasurer update (=treasurer), eng-driven adhoc update (=adhoc), and target update (=target_switch).
  -- 
 
-
-
 WITH para AS (
-SELECT '2023-04-05' AS start_dt)
+-- Please change the para below to specify the time frame
+SELECT '2023-04-05' AS start_dt
+, '2023-12-30' as end_dt)
 
 , all_ AS (    
 SELECT 
@@ -31,7 +31,8 @@ WHERE ctc.campaign_id IN (
   FULL OUTER JOIN pinpoint.public.elephant_changes ec ON  ctc.id = ec.row_id
   CROSS JOIN para
   WHERE ec.table_name = 'campaign_treasurer_configs'
-  	AND ec.logged_at > from_iso8601_timestamp(start_dt)
+  	AND ec.logged_at >= from_iso8601_timestamp(start_dt)
+  	AND ec.logged_at < from_iso8601_timestamp(end_dt)
   	--AND ctc.campaign_id IN (4293, 12624, 29288,6318)  
  )	
 GROUP BY 1,2,3,4,5,6
@@ -62,7 +63,8 @@ FROM (SELECT
     ORDER BY 2 DESC     
 ) AS TT
 CROSS JOIN para 
-WHERE logged_at > from_iso8601_timestamp(start_dt)
+WHERE logged_at >= from_iso8601_timestamp(start_dt)
+	AND logged_at < from_iso8601_timestamp(end_dt)
 GROUP BY 1,2,3,4,5,6
 
 UNION ALL 
