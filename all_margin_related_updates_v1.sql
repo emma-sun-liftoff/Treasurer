@@ -135,11 +135,11 @@ WHERE all_.campaign_id NOT IN (SELECT
 )
 SELECT*
 FROM all1_
-ORDER BY 1,2
+ORDER BY 1,3
 
 -- query examples 
 -- all disabled campaigns during a time frame (there are two cases: 1) disabled all the way 2) disabled after NR/RPI. If the former, num_target = 1)
 SELECT*
 FROM all1_
 WHERE tda_target = 'disabled'
-ORDER BY 1,2
+ORDER BY 1,3
